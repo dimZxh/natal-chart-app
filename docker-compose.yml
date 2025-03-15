@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  natal-chart-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    container_name: natal-chart-app 
