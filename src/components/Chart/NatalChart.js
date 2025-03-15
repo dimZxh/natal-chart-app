@@ -8,6 +8,7 @@ import LoadingSpinner from '../UI/LoadingSpinner';
 import HouseMarker from './HouseMarker';
 import ZodiacWheel from './ZodiacWheel';
 import AspectLines from './AspectLines';
+import Button from '../UI/Button';
 
 // Planetary colors and symbols based on harmonic design principles
 const PLANET_COLORS = {
@@ -65,11 +66,19 @@ const NatalChart = () => {
   const [chartSize, setChartSize] = useState(650);
   const [selectedPlanet, setSelectedPlanet] = useState(null);
   const [chartScale, setChartScale] = useState(1);
+  const [aspectDisplayActive, setAspectDisplayActive] = useState(true);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [chartPosition, setChartPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipContent, setTooltipContent] = useState({ planet: null, position: { x: 0, y: 0 } });
+  
   const chartRef = useRef(null);
+  const svgRef = useRef(null);
   const viewBoxSize = 800; // SVG viewBox size
   const chartCenter = viewBoxSize / 2;
   const outerRadius = viewBoxSize * 0.45;
-  const aspectDisplayActive = true; // Toggle for aspect lines
   
   // Function to handle window resize and adjust chart size
   useEffect(() => {
@@ -104,10 +113,113 @@ const NatalChart = () => {
   // Handle chart click outside planets to deselect
   const handleChartClick = (e) => {
     // Only deselect if clicking on the chart background, not a planet
-    if (e.target === chartRef.current) {
+    if (e.target === svgRef.current) {
       setSelectedPlanet(null);
     }
   };
+  
+  // Handle mouse down for dragging
+  const handleMouseDown = (e) => {
+    if (e.button === 0) { // Left mouse button
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX - chartPosition.x,
+        y: e.clientY - chartPosition.y
+      });
+    }
+  };
+  
+  // Handle mouse move for dragging
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      const newX = e.clientX - dragStart.x;
+      const newY = e.clientY - dragStart.y;
+      
+      // Limit dragging to prevent chart from moving too far
+      const maxDrag = chartSize * zoomLevel * 0.2;
+      const clampedX = Math.max(Math.min(newX, maxDrag), -maxDrag);
+      const clampedY = Math.max(Math.min(newY, maxDrag), -maxDrag);
+      
+      setChartPosition({
+        x: clampedX,
+        y: clampedY
+      });
+    }
+  };
+  
+  // Handle mouse up to end dragging
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+  
+  // Handle mouse leave to end dragging
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
+  
+  // Handle zoom in
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.1, 2));
+  };
+  
+  // Handle zoom out
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.1, 0.8));
+    
+    // Reset position if zooming out to default
+    if (zoomLevel <= 0.9) {
+      setChartPosition({ x: 0, y: 0 });
+    }
+  };
+  
+  // Handle reset zoom and position
+  const handleResetView = () => {
+    setZoomLevel(1);
+    setChartPosition({ x: 0, y: 0 });
+  };
+  
+  // Toggle aspect lines
+  const toggleAspectLines = () => {
+    setAspectDisplayActive(prev => !prev);
+  };
+  
+  // Handle planet hover for tooltip
+  const handlePlanetHover = (planet, x, y) => {
+    if (planet) {
+      setTooltipContent({
+        planet,
+        position: { x, y }
+      });
+      setShowTooltip(true);
+    } else {
+      setShowTooltip(false);
+    }
+  };
+  
+  useEffect(() => {
+    // Add wheel event listener for zooming with mouse wheel
+    const handleWheel = (e) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        // Zoom in
+        setZoomLevel(prev => Math.min(prev + 0.05, 2));
+      } else {
+        // Zoom out
+        setZoomLevel(prev => Math.max(prev - 0.05, 0.8));
+      }
+    };
+    
+    const chartElement = chartRef.current;
+    if (chartElement) {
+      chartElement.addEventListener('wheel', handleWheel, { passive: false });
+    }
+    
+    return () => {
+      if (chartElement) {
+        chartElement.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, []);
   
   if (isLoading) {
     return <LoadingSpinner message="Calculating chart positions..." />;
@@ -145,17 +257,74 @@ const NatalChart = () => {
         </div>
       </div>
       
+      <div className="chart-controls">
+        <Button 
+          variant="outline" 
+          size="small" 
+          onClick={handleZoomIn}
+          aria-label="Zoom in"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </Button>
+        
+        <Button 
+          variant="outline" 
+          size="small" 
+          onClick={handleZoomOut}
+          aria-label="Zoom out"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </Button>
+        
+        <Button 
+          variant="outline" 
+          size="small" 
+          onClick={handleResetView}
+          aria-label="Reset view"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 4V1H4M15 4V1H12M1 12V15H4M15 12V15H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </Button>
+        
+        <Button 
+          variant={aspectDisplayActive ? "primary" : "outline"} 
+          size="small" 
+          onClick={toggleAspectLines}
+          aria-label={aspectDisplayActive ? "Hide aspect lines" : "Show aspect lines"}
+        >
+          {aspectDisplayActive ? "Hide Aspects" : "Show Aspects"}
+        </Button>
+      </div>
+      
       <div 
         className="chart-wrapper"
-        style={{ width: `${chartSize}px`, height: `${chartSize}px` }}
+        style={{ 
+          width: `${chartSize}px`, 
+          height: `${chartSize}px`,
+          cursor: isDragging ? 'grabbing' : 'grab'
+        }}
+        ref={chartRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
       >
         <svg 
           width="100%" 
           height="100%" 
           viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`}
-          ref={chartRef}
+          ref={svgRef}
           onClick={handleChartClick}
           className="natal-chart-svg"
+          style={{
+            transform: `scale(${zoomLevel}) translate(${chartPosition.x / zoomLevel}px, ${chartPosition.y / zoomLevel}px)`,
+            transformOrigin: 'center'
+          }}
         >
           {/* Background circle */}
           <circle 
@@ -212,6 +381,8 @@ const NatalChart = () => {
               scale={chartScale}
               isSelected={selectedPlanet === planet.name}
               onClick={() => handlePlanetClick(planet.name)}
+              onMouseEnter={(x, y) => handlePlanetHover(planet, x, y)}
+              onMouseLeave={() => handlePlanetHover(null)}
             />
           ))}
           
@@ -224,6 +395,21 @@ const NatalChart = () => {
             opacity="0.5"
           />
         </svg>
+        
+        {/* Tooltip */}
+        {showTooltip && tooltipContent.planet && (
+          <div 
+            className="planet-tooltip"
+            style={{
+              left: tooltipContent.position.x,
+              top: tooltipContent.position.y
+            }}
+          >
+            <h4>{tooltipContent.planet.name}</h4>
+            <p>{tooltipContent.planet.sign} {tooltipContent.planet.degree.toFixed(1)}°</p>
+            <p>House: {tooltipContent.planet.house}</p>
+          </div>
+        )}
       </div>
       
       <ChartLegend 
@@ -265,6 +451,14 @@ const NatalChart = () => {
           font-size: 0.95rem;
         }
         
+        .chart-controls {
+          display: flex;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+        
         .chart-wrapper {
           position: relative;
           max-width: 100%;
@@ -273,15 +467,37 @@ const NatalChart = () => {
           border-radius: 50%;
           background-color: var(--color-background-chart);
           transition: transform 0.3s ease;
-        }
-        
-        .chart-wrapper:hover {
-          transform: scale(1.01);
+          overflow: hidden;
         }
         
         .natal-chart-svg {
           border-radius: 50%;
           overflow: visible;
+          transition: transform 0.2s ease;
+        }
+        
+        .planet-tooltip {
+          position: absolute;
+          background-color: var(--color-bg-light);
+          border-radius: 8px;
+          padding: 0.75rem;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          z-index: 10;
+          pointer-events: none;
+          transform: translate(-50%, -100%);
+          margin-top: -10px;
+          min-width: 150px;
+          border: 1px solid var(--color-border);
+        }
+        
+        .planet-tooltip h4 {
+          margin: 0 0 0.5rem;
+          color: var(--color-primary);
+        }
+        
+        .planet-tooltip p {
+          margin: 0.25rem 0;
+          font-size: 0.9rem;
         }
         
         .chart-error {
@@ -314,6 +530,10 @@ const NatalChart = () => {
           
           .chart-details h3 {
             font-size: 1.2rem;
+          }
+          
+          .chart-controls {
+            margin-bottom: 0.75rem;
           }
         }
       `}</style>

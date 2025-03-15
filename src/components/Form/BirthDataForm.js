@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
 import { useChartContext } from '../../context/ChartContext';
 import { geocodeAddress } from '../../api/astronomyApi';
+import EnhancedDatePicker from './EnhancedDatePicker';
+import Button from '../UI/Button';
+import LoadingSpinner from '../UI/LoadingSpinner';
 
 const BirthDataForm = () => {
   const { setBirthData, birthData, saveProfile, savedProfiles } = useChartContext();
@@ -224,36 +225,14 @@ const BirthDataForm = () => {
         
         <div className="form-group date-time-group">
           <div className="date-field">
-            <label className="form-label" htmlFor="birthDate">Birth Date:</label>
-            <div className="date-picker-container">
-              <DatePicker
-                id="birthDate"
-                selected={birthDate}
-                onChange={handleDateChange}
-                className={`form-control date-picker ${errors.birthDate ? 'is-invalid' : ''}`}
-                dateFormat="MMMM d, yyyy"
-                showMonthDropdown
-                showYearDropdown
-                dropdownMode="select"
-                yearDropdownItemNumber={100}
-                scrollableYearDropdown
-                placeholderText="Select birth date"
-                required
-                fixedHeight
-                showPopperArrow
-                popperClassName="date-picker-popper"
-                popperPlacement="bottom-start"
-                popperModifiers={{
-                  preventOverflow: {
-                    enabled: true,
-                    escapeWithReference: false,
-                    boundariesElement: 'viewport'
-                  }
-                }}
-              />
-              <span className="date-icon">📅</span>
-            </div>
-            {errors.birthDate && <div className="invalid-feedback">{errors.birthDate}</div>}
+            <EnhancedDatePicker
+              id="birthDate"
+              selectedDate={birthDate}
+              onChange={handleDateChange}
+              label="Birth Date"
+              required={true}
+              error={errors.birthDate}
+            />
           </div>
           
           <div className="time-field">
@@ -267,7 +246,12 @@ const BirthDataForm = () => {
                 onChange={handleInputChange(setBirthTime)}
                 required
               />
-              <span className="time-icon">🕒</span>
+              <span className="time-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 3.5V8L11 10.5M15 8C15 11.866 11.866 15 8 15C4.13401 15 1 11.866 1 8C1 4.13401 4.13401 1 8 1C11.866 1 15 4.13401 15 8Z" 
+                    stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
             </div>
             {errors.birthTime && <div className="invalid-feedback">{errors.birthTime}</div>}
           </div>
@@ -285,7 +269,14 @@ const BirthDataForm = () => {
               placeholder="City, Country"
               required={!latitude || !longitude}
             />
-            <span className="location-icon">📍</span>
+            <span className="location-icon">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 8.5C9.10457 8.5 10 7.60457 10 6.5C10 5.39543 9.10457 4.5 8 4.5C6.89543 4.5 6 5.39543 6 6.5C6 7.60457 6.89543 8.5 8 8.5Z" 
+                  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M13 6.5C13 11 8 14.5 8 14.5C8 14.5 3 11 3 6.5C3 3.46243 5.23858 1 8 1C10.7614 1 13 3.46243 13 6.5Z" 
+                  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
           </div>
           {errors.birthPlace && <div className="invalid-feedback">{errors.birthPlace}</div>}
         </div>
@@ -335,36 +326,38 @@ const BirthDataForm = () => {
         
         <div className="form-actions">
           <div className="action-buttons">
-            <button 
+            <Button 
               type="submit" 
-              className="btn btn-primary generate-btn"
+              variant="primary"
+              size="medium"
               disabled={isGeocoding}
             >
               {isGeocoding ? (
-                <><span className="spinner-small"></span> Finding Location...</>
+                <><LoadingSpinner message="" /> Finding Location...</>
               ) : (
                 'Generate Chart'
               )}
-            </button>
+            </Button>
             
             {birthData && (
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary save-btn"
+                variant="secondary"
                 onClick={handleSaveProfile}
               >
                 Save Profile
-              </button>
+              </Button>
             )}
           </div>
           
-          <button
+          <Button
             type="button"
-            className="btn btn-text clear-btn"
+            variant="outline"
+            size="small"
             onClick={handleClearForm}
           >
             Clear Form
-          </button>
+          </Button>
         </div>
       </form>
       
@@ -375,7 +368,6 @@ const BirthDataForm = () => {
           position: relative;
         }
         
-        .date-icon,
         .time-icon,
         .location-icon {
           position: absolute;
@@ -417,18 +409,6 @@ const BirthDataForm = () => {
           cursor: pointer;
         }
         
-        .spinner-small {
-          display: inline-block;
-          width: 1rem;
-          height: 1rem;
-          border: 2px solid rgba(255, 255, 255, 0.3);
-          border-radius: 50%;
-          border-top-color: white;
-          animation: spin 1s linear infinite;
-          margin-right: 8px;
-          vertical-align: middle;
-        }
-        
         .coordinates-help {
           margin-top: 0;
           margin-bottom: 16px;
@@ -437,16 +417,19 @@ const BirthDataForm = () => {
           font-style: italic;
         }
         
-        .btn-text {
+        .link-button {
           background: none;
           border: none;
-          color: var(--color-text-light);
-          text-decoration: underline;
-          padding: 8px 12px;
+          color: var(--color-primary);
+          cursor: pointer;
+          padding: 8px 0;
+          font-size: 0.9rem;
+          display: inline-flex;
+          align-items: center;
         }
         
-        .btn-text:hover {
-          color: var(--color-primary);
+        .link-button:hover {
+          text-decoration: underline;
         }
         
         .action-buttons {
@@ -463,10 +446,6 @@ const BirthDataForm = () => {
           .form-actions {
             flex-direction: column;
             gap: 16px;
-          }
-          
-          .btn-text {
-            text-align: center;
           }
         }
       `}</style>

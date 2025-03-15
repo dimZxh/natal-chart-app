@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 
 // Planet colors and symbols mapping
 const PLANET_COLORS = {
@@ -26,8 +26,12 @@ const PlanetMark = ({
   radius, 
   scale = 1,
   isSelected = false,
-  onClick 
+  onClick,
+  onMouseEnter,
+  onMouseLeave
 }) => {
+  const planetRef = useRef(null);
+  
   // Calculate planet position based on its longitude
   const angle = (planet.position - 90) * (Math.PI / 180);
   const x = centerX + (radius * Math.cos(angle));
@@ -40,6 +44,24 @@ const PlanetMark = ({
   const color = PLANET_COLORS[planet.name] || '#999999';
   const strokeWidth = isSelected ? 2 : 1;
   
+  // Handle mouse enter for tooltip
+  const handleMouseEnter = (e) => {
+    if (onMouseEnter) {
+      // Get the position for the tooltip
+      const rect = planetRef.current.getBoundingClientRect();
+      const tooltipX = rect.left + rect.width / 2;
+      const tooltipY = rect.top;
+      onMouseEnter(tooltipX, tooltipY);
+    }
+  };
+  
+  // Handle mouse leave for tooltip
+  const handleMouseLeave = () => {
+    if (onMouseLeave) {
+      onMouseLeave();
+    }
+  };
+  
   return (
     <g 
       className={`planet-mark ${isSelected ? 'selected' : ''}`}
@@ -47,6 +69,9 @@ const PlanetMark = ({
         e.stopPropagation();
         onClick();
       }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      ref={planetRef}
     >
       {/* Line from center to planet */}
       <line
@@ -126,6 +151,10 @@ const PlanetMark = ({
         .planet-mark:hover .planet-circle {
           opacity: 1;
           r: ${circleRadius * 1.1}px;
+        }
+        
+        .planet-mark.selected .planet-circle {
+          box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
         }
       `}</style>
     </g>
