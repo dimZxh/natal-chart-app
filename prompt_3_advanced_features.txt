@@ -1,0 +1,16 @@
+You are an expert astrology software developer with extensive React experience. I have a natal chart application that currently displays a basic interactive chart with planet positions, houses, and aspects.
+
+I want to add more advanced astrological features to my application. Please provide code implementations for the following features:
+
+1. Transit chart overlay - Show current planetary positions overlaid on the natal chart
+2. Aspect interpretation component - Display interpretations of the major aspects in the chart
+3. Customizable chart settings - Allow users to toggle different calculation methods (sidereal/tropical, house systems)
+4. Animated chart transitions - Smooth transitions when changing between different chart views
+
+My application already has these components:
+- NatalChart.js - Main chart rendering component using SVG and D3
+- ChartLegend.js - Displays details about planets and aspects
+- BirthDataForm.js - Collects user information
+- React context for chart data management
+
+For each feature, provide specific code examples that I can directly integrate into my existing application structure, including any new components needed. 

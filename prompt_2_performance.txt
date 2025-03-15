@@ -1,0 +1,18 @@
+You are a React performance optimization expert. I have a natal chart application built with React that visualizes astrological charts based on user input birth details.
+
+The application includes these key components:
+1. NatalChart.js - Renders an SVG-based astrological chart with interactive elements
+2. BirthDataForm.js - Handles user input with form validation
+3. EnhancedDatePicker.js - Custom date picker implementation
+4. Several UI components like Button and LoadingSpinner
+
+The chart has interactive features like zooming, panning, and tooltips when hovering over planets. The SVG can become complex with many elements when rendering aspects between planets.
+
+Please provide specific code optimizations to improve the performance focusing on:
+
+1. React rendering optimizations (useMemo, useCallback, memo)
+2. SVG rendering performance improvements
+3. Form handling optimizations
+4. Any other performance bottlenecks you can identify
+
+For each suggestion, please provide the specific code changes needed with before/after examples. 

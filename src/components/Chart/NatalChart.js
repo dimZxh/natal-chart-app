@@ -8,6 +8,7 @@ import LoadingSpinner from '../UI/LoadingSpinner';
 import HouseMarker from './HouseMarker';
 import ZodiacWheel from './ZodiacWheel';
 import AspectLines from './AspectLines';
+import ChartSettings from './ChartSettings';
 
 // Planetary colors and symbols based on harmonic design principles
 const PLANET_COLORS = {
@@ -61,7 +62,7 @@ const ASPECT_COLORS = {
 };
 
 const NatalChart = () => {
-  const { birthData, chartData, isLoading, error } = useChartContext();
+  const { birthData, chartData, isLoading, error, chartSettings } = useChartContext();
   const [chartSize, setChartSize] = useState(650);
   const [selectedPlanet, setSelectedPlanet] = useState(null);
   const [chartScale, setChartScale] = useState(1);
@@ -95,14 +96,14 @@ const NatalChart = () => {
         setChartSize(Math.min(width * 0.5, 650));
         setChartScale(1);
       }
-    };
+    }, [selectedPlanet]);
 
     handleResize(); // Call once on mount
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-    };
+    }, [selectedPlanet]);
   }, []);
 
   // Initialize chart center
@@ -111,9 +112,9 @@ const NatalChart = () => {
   }, [baseChartCenter]);
 
   // Handle planet selection
-  const handlePlanetClick = (planet) => {
+  const handlePlanetClick = React.useCallback((planet) => {
     setSelectedPlanet(selectedPlanet === planet ? null : planet);
-  };
+  }, [selectedPlanet]);
 
   // Handle chart click outside planets to deselect
   const handleChartClick = (e) => {
@@ -121,7 +122,7 @@ const NatalChart = () => {
     if (e.target === svgRef.current) {
       setSelectedPlanet(null);
     }
-  };
+  }, [selectedPlanet]);
 
   // Handle mouse over for tooltips
   const handlePlanetMouseOver = (planet, event) => {
@@ -133,7 +134,7 @@ const NatalChart = () => {
         degree: planetData.degree.toFixed(2),
         house: planetData.house,
         retrograde: planetData.retrograde
-      };
+      }, [selectedPlanet]);
       
       // Calculate position relative to the SVG
       const svgRect = svgRef.current.getBoundingClientRect();
@@ -144,12 +145,12 @@ const NatalChart = () => {
       setTooltipPosition({ x, y });
       setShowTooltip(true);
     }
-  };
+  }, [selectedPlanet]);
 
   // Handle mouse out for tooltips
   const handlePlanetMouseOut = () => {
     setShowTooltip(false);
-  };
+  }, [selectedPlanet]);
 
   // Handle zoom with mouse wheel
   const handleWheel = (e) => {
@@ -157,7 +158,7 @@ const NatalChart = () => {
     const delta = e.deltaY < 0 ? 0.1 : -0.1;
     const newZoom = Math.max(0.5, Math.min(2, zoomLevel + delta));
     setZoomLevel(newZoom);
-  };
+  }, [selectedPlanet]);
 
   // Handle drag start
   const handleMouseDown = (e) => {
@@ -165,7 +166,7 @@ const NatalChart = () => {
       setIsDragging(true);
       setDragStart({ x: e.clientX, y: e.clientY });
     }
-  };
+  }, [selectedPlanet]);
 
   // Handle drag
   const handleMouseMove = (e) => {
@@ -180,28 +181,28 @@ const NatalChart = () => {
       
       setDragStart({ x: e.clientX, y: e.clientY });
     }
-  };
+  }, [selectedPlanet]);
 
   // Handle drag end
   const handleMouseUp = () => {
     setIsDragging(false);
-  };
+  }, [selectedPlanet]);
 
   // Handle drag leave
   const handleMouseLeave = () => {
     setIsDragging(false);
-  };
+  }, [selectedPlanet]);
 
   // Toggle aspect lines
   const toggleAspectLines = () => {
     setAspectDisplayActive(!aspectDisplayActive);
-  };
+  }, [selectedPlanet]);
 
   // Reset zoom and position
-  const resetView = () => {
+  const resetView = React.useCallback(() => {
     setZoomLevel(1);
     setChartCenter({ x: baseChartCenter, y: baseChartCenter });
-  };
+  }, [selectedPlanet]);
 
   if (isLoading) {
     return <LoadingSpinner message="Calculating chart positions..." />;
@@ -233,15 +234,18 @@ const NatalChart = () => {
 
   return (
     <div className="natal-chart-container">
-      <div className="chart-heading">
+      <div className="chart-header">
         <h2>Natal Chart</h2>
-        <div className="chart-details">
-          <h3>{birthData.name}</h3>
-          <p>{new Date(birthData.date).toLocaleDateString()} at {birthData.time}</p>
-          <p>{birthData.place}</p>
-        </div>
+        {birthData && (
+          <div className="birth-info">
+            <p>{birthData.name} - {format(new Date(birthData.date), 'MMMM d, yyyy')} at {birthData.time}</p>
+            <p>{birthData.location}</p>
+          </div>
+        )}
       </div>
 
+      <ChartSettings />
+      
       <div className="chart-controls">
         <button 
           className="control-btn"
@@ -260,7 +264,7 @@ const NatalChart = () => {
           <button 
             className="zoom-btn"
             onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
-            aria-label="Zoom out"
+            aria-label="Zoom out" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && handleZoomOut()}
           >
             -
           </button>
@@ -268,7 +272,7 @@ const NatalChart = () => {
           <button 
             className="zoom-btn"
             onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}
-            aria-label="Zoom in"
+            aria-label="Zoom in" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && handleZoomIn()}
           >
             +
           </button>
@@ -328,7 +332,7 @@ const NatalChart = () => {
             ))}
 
             {/* Aspect lines between planets */}
-            {aspectDisplayActive && aspects && (
+            {chartData && chartSettings.showAspects && aspects && (
               <AspectLines
                 aspects={aspects}
                 planets={planets}
@@ -393,26 +397,21 @@ const NatalChart = () => {
           box-shadow: var(--shadow-md);
         }
         
-        .chart-heading {
+        .chart-header {
           margin-bottom: 1.5rem;
           text-align: center;
         }
         
-        .chart-heading h2 {
+        .chart-header h2 {
           color: var(--color-primary);
           margin-bottom: 0.5rem;
         }
         
-        .chart-details {
+        .birth-info {
           margin-bottom: 1rem;
         }
         
-        .chart-details h3 {
-          margin-bottom: 0.25rem;
-          color: var(--color-text);
-        }
-        
-        .chart-details p {
+        .birth-info p {
           margin: 0.25rem 0;
           color: var(--color-text-light);
         }
@@ -530,11 +529,11 @@ const NatalChart = () => {
             padding: 0.5rem;
           }
 
-          .chart-heading h2 {
+          .chart-header h2 {
             font-size: 1.5rem;
           }
 
-          .chart-details h3 {
+          .birth-info p {
             font-size: 1.2rem;
           }
           
@@ -554,3 +553,4 @@ const NatalChart = () => {
 };
 
 export default NatalChart; 
+

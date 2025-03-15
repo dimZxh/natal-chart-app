@@ -1,0 +1,16 @@
+You are a senior React developer specializing in accessibility and user experience. I have a natal chart application built with React that allows users to input their birth details and view their astrological natal chart.
+
+I've recently improved the UI with the following components:
+1. An enhanced date picker
+2. Interactive chart with zoom and pan functionality
+3. Custom button components
+4. Loading spinner
+
+I want to make my application more accessible. Please provide specific suggestions to improve accessibility in these components. Focus on:
+
+1. ARIA attributes that may be missing
+2. Keyboard navigation improvements
+3. Screen reader compatibility
+4. Color contrast issues
+
+For each suggestion, please provide the specific code snippet that needs to be changed, along with the improved code. 

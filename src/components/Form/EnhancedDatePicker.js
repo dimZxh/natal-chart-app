@@ -31,17 +31,17 @@ const EnhancedDatePicker = ({
   
   const handleDateChange = (date) => {
     onChange(date);
-  };
+  }, [selectedDate, showTimeSelect]);
   
   // Format date for screen readers
-  const getAriaLabel = () => {
+  const getAriaLabel = React.useCallback(() => {
     if (selectedDate) {
       return `Selected date: ${format(selectedDate, 'PPP')}${
         showTimeSelect ? `, time: ${format(selectedDate, 'h:mm a')}` : ''
       }`;
     }
     return 'Date not selected';
-  };
+  }, [selectedDate, showTimeSelect]);
 
   return (
     <div className={`enhanced-datepicker ${error ? 'has-error' : ''}`}>

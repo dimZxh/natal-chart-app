@@ -132,4 +132,4 @@ const PlanetMark = ({
   );
 };
 
-export default PlanetMark; 
+export default React.memo(PlanetMark); 

@@ -1,0 +1,15 @@
+Suggest 3 accessibility improvements for a React app with this component:
+
+```jsx
+const DatePicker = ({ date, onChange }) => (
+  <div className='date-picker'>
+    <input 
+      type='date' 
+      value={date} 
+      onChange={(e) => onChange(e.target.value)} 
+    />
+  </div>
+);
+```
+
+Provide improved code for each suggestion. 

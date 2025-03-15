@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
 import { fetchPlanetaryPositions } from '../api/astronomyApi';
 
 // Initial state
@@ -87,6 +87,13 @@ const chartReducer = (state, action) => {
 // Provider component
 export const ChartProvider = ({ children }) => {
   const [state, dispatch] = useReducer(chartReducer, initialState);
+  const [chartSettings, setChartSettings] = useState({
+    showAspects: true,
+    showHouses: true,
+    showDegrees: true,
+    houseSystem: 'Placidus',
+    zodiacType: 'Tropical'
+  });
 
   // Load saved profiles from localStorage on initial render
   useEffect(() => {
@@ -173,6 +180,11 @@ export const ChartProvider = ({ children }) => {
     });
   };
 
+  // Update chart settings
+  const updateChartSettings = (newSettings) => {
+    setChartSettings(newSettings);
+  };
+
   // Save a profile
   const saveProfile = (profile) => {
     dispatch({
@@ -204,7 +216,9 @@ export const ChartProvider = ({ children }) => {
         setBirthData,
         saveProfile,
         deleteProfile,
-        loadProfile
+        loadProfile,
+        chartSettings,
+        updateChartSettings
       }}
     >
       {children}
