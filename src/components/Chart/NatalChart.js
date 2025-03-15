@@ -65,12 +65,21 @@ const NatalChart = () => {
   const [chartSize, setChartSize] = useState(650);
   const [selectedPlanet, setSelectedPlanet] = useState(null);
   const [chartScale, setChartScale] = useState(1);
-  const chartRef = useRef(null);
-  const viewBoxSize = 800; // SVG viewBox size
-  const chartCenter = viewBoxSize / 2;
-  const outerRadius = viewBoxSize * 0.45;
-  const aspectDisplayActive = true; // Toggle for aspect lines
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipContent, setTooltipContent] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [chartCenter, setChartCenter] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [aspectDisplayActive, setAspectDisplayActive] = useState(true);
   
+  const chartRef = useRef(null);
+  const svgRef = useRef(null);
+  const viewBoxSize = 800; // SVG viewBox size
+  const baseChartCenter = viewBoxSize / 2;
+  const outerRadius = viewBoxSize * 0.45;
+
   // Function to handle window resize and adjust chart size
   useEffect(() => {
     const handleResize = () => {
@@ -87,32 +96,117 @@ const NatalChart = () => {
         setChartScale(1);
       }
     };
-    
+
     handleResize(); // Call once on mount
     window.addEventListener('resize', handleResize);
-    
+
     return () => {
       window.removeEventListener('resize', handleResize);
     };
   }, []);
-  
+
+  // Initialize chart center
+  useEffect(() => {
+    setChartCenter({ x: baseChartCenter, y: baseChartCenter });
+  }, [baseChartCenter]);
+
   // Handle planet selection
   const handlePlanetClick = (planet) => {
     setSelectedPlanet(selectedPlanet === planet ? null : planet);
   };
-  
+
   // Handle chart click outside planets to deselect
   const handleChartClick = (e) => {
     // Only deselect if clicking on the chart background, not a planet
-    if (e.target === chartRef.current) {
+    if (e.target === svgRef.current) {
       setSelectedPlanet(null);
     }
   };
-  
+
+  // Handle mouse over for tooltips
+  const handlePlanetMouseOver = (planet, event) => {
+    const planetData = chartData.planets.find(p => p.name === planet);
+    if (planetData) {
+      const content = {
+        name: planetData.name,
+        sign: planetData.sign,
+        degree: planetData.degree.toFixed(2),
+        house: planetData.house,
+        retrograde: planetData.retrograde
+      };
+      
+      // Calculate position relative to the SVG
+      const svgRect = svgRef.current.getBoundingClientRect();
+      const x = event.clientX - svgRect.left;
+      const y = event.clientY - svgRect.top;
+      
+      setTooltipContent(content);
+      setTooltipPosition({ x, y });
+      setShowTooltip(true);
+    }
+  };
+
+  // Handle mouse out for tooltips
+  const handlePlanetMouseOut = () => {
+    setShowTooltip(false);
+  };
+
+  // Handle zoom with mouse wheel
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.1 : -0.1;
+    const newZoom = Math.max(0.5, Math.min(2, zoomLevel + delta));
+    setZoomLevel(newZoom);
+  };
+
+  // Handle drag start
+  const handleMouseDown = (e) => {
+    if (e.button === 0) { // Left mouse button
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  // Handle drag
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      const dx = (e.clientX - dragStart.x) / zoomLevel;
+      const dy = (e.clientY - dragStart.y) / zoomLevel;
+      
+      setChartCenter({
+        x: chartCenter.x + dx,
+        y: chartCenter.y + dy
+      });
+      
+      setDragStart({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  // Handle drag end
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Handle drag leave
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
+
+  // Toggle aspect lines
+  const toggleAspectLines = () => {
+    setAspectDisplayActive(!aspectDisplayActive);
+  };
+
+  // Reset zoom and position
+  const resetView = () => {
+    setZoomLevel(1);
+    setChartCenter({ x: baseChartCenter, y: baseChartCenter });
+  };
+
   if (isLoading) {
     return <LoadingSpinner message="Calculating chart positions..." />;
   }
-  
+
   if (error) {
     return (
       <div className="chart-error">
@@ -121,7 +215,7 @@ const NatalChart = () => {
       </div>
     );
   }
-  
+
   if (!birthData || !chartData || !chartData.planets || !chartData.houses) {
     return (
       <div className="chart-placeholder">
@@ -130,10 +224,13 @@ const NatalChart = () => {
       </div>
     );
   }
-  
+
   // Destructure chart data
   const { planets, houses, aspects } = chartData;
-  
+
+  // Calculate transform for zoom and pan
+  const transform = `scale(${zoomLevel}) translate(${(chartCenter.x - baseChartCenter) / zoomLevel}px, ${(chartCenter.y - baseChartCenter) / zoomLevel}px)`;
+
   return (
     <div className="natal-chart-container">
       <div className="chart-heading">
@@ -144,176 +241,311 @@ const NatalChart = () => {
           <p>{birthData.place}</p>
         </div>
       </div>
-      
-      <div 
+
+      <div className="chart-controls">
+        <button 
+          className="control-btn"
+          onClick={toggleAspectLines}
+          aria-pressed={aspectDisplayActive}
+        >
+          {aspectDisplayActive ? 'Hide Aspects' : 'Show Aspects'}
+        </button>
+        <button 
+          className="control-btn"
+          onClick={resetView}
+        >
+          Reset View
+        </button>
+        <div className="zoom-controls">
+          <button 
+            className="zoom-btn"
+            onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
+            aria-label="Zoom out"
+          >
+            -
+          </button>
+          <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
+          <button 
+            className="zoom-btn"
+            onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <div
         className="chart-wrapper"
         style={{ width: `${chartSize}px`, height: `${chartSize}px` }}
+        onWheel={handleWheel}
       >
-        <svg 
-          width="100%" 
-          height="100%" 
+        <svg
+          width="100%"
+          height="100%"
           viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`}
-          ref={chartRef}
+          ref={svgRef}
           onClick={handleChartClick}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
           className="natal-chart-svg"
+          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         >
-          {/* Background circle */}
-          <circle 
-            cx={chartCenter} 
-            cy={chartCenter} 
-            r={outerRadius} 
-            fill="var(--color-chart-bg)" 
-            stroke="var(--color-chart-border)"
-            strokeWidth="2"
-          />
-          
-          {/* Zodiac wheel */}
-          <ZodiacWheel 
-            centerX={chartCenter} 
-            centerY={chartCenter} 
-            outerRadius={outerRadius} 
-            innerRadius={outerRadius * 0.85}
-          />
-          
-          {/* House lines and numbers */}
-          {houses.map((house, index) => (
-            <HouseMarker
-              key={`house-${index + 1}`}
-              houseNumber={index + 1}
-              position={house.position}
-              centerX={chartCenter}
-              centerY={chartCenter}
+          <g style={{ transform }}>
+            {/* Background circle */}
+            <circle
+              cx={baseChartCenter}
+              cy={baseChartCenter}
+              r={outerRadius}
+              fill="var(--color-chart-bg)"
+              stroke="var(--color-chart-border)"
+              strokeWidth="2"
+            />
+
+            {/* Zodiac wheel */}
+            <ZodiacWheel
+              centerX={baseChartCenter}
+              centerY={baseChartCenter}
               outerRadius={outerRadius}
-              innerRadius={outerRadius * 0.7}
-              scale={chartScale}
+              innerRadius={outerRadius * 0.85}
+              colors={ZODIAC_COLORS}
             />
-          ))}
-          
-          {/* Aspect lines between planets */}
-          {aspectDisplayActive && aspects && (
-            <AspectLines
-              aspects={aspects}
-              planets={planets}
-              centerX={chartCenter}
-              centerY={chartCenter}
-              radius={outerRadius * 0.6}
-              selectedPlanet={selectedPlanet}
-            />
-          )}
-          
-          {/* Planet symbols */}
-          {planets.map((planet) => (
-            <PlanetMark
-              key={planet.name}
-              planet={planet}
-              centerX={chartCenter}
-              centerY={chartCenter}
-              radius={outerRadius * 0.6}
-              scale={chartScale}
-              isSelected={selectedPlanet === planet.name}
-              onClick={() => handlePlanetClick(planet.name)}
-            />
-          ))}
-          
-          {/* Chart center point */}
-          <circle
-            cx={chartCenter}
-            cy={chartCenter}
-            r={3}
-            fill="var(--color-text)"
-            opacity="0.5"
-          />
+
+            {/* House lines and numbers */}
+            {houses.map((house, index) => (
+              <HouseMarker
+                key={`house-${index + 1}`}
+                houseNumber={index + 1}
+                position={house.position}
+                centerX={baseChartCenter}
+                centerY={baseChartCenter}
+                outerRadius={outerRadius}
+                innerRadius={outerRadius * 0.7}
+                scale={chartScale}
+              />
+            ))}
+
+            {/* Aspect lines between planets */}
+            {aspectDisplayActive && aspects && (
+              <AspectLines
+                aspects={aspects}
+                planets={planets}
+                centerX={baseChartCenter}
+                centerY={baseChartCenter}
+                radius={outerRadius * 0.6}
+                selectedPlanet={selectedPlanet}
+                colors={ASPECT_COLORS}
+              />
+            )}
+
+            {/* Planet symbols */}
+            {planets.map((planet) => (
+              <PlanetMark
+                key={planet.name}
+                planet={planet}
+                centerX={baseChartCenter}
+                centerY={baseChartCenter}
+                radius={outerRadius * 0.6}
+                color={PLANET_COLORS[planet.name] || '#666666'}
+                isSelected={selectedPlanet === planet.name}
+                onClick={() => handlePlanetClick(planet.name)}
+                onMouseOver={(e) => handlePlanetMouseOver(planet.name, e)}
+                onMouseOut={handlePlanetMouseOut}
+                scale={chartScale}
+              />
+            ))}
+          </g>
         </svg>
+
+        {/* Tooltip */}
+        {showTooltip && tooltipContent && (
+          <div 
+            className="planet-tooltip"
+            style={{
+              left: `${tooltipPosition.x + 10}px`,
+              top: `${tooltipPosition.y + 10}px`
+            }}
+          >
+            <h4>{tooltipContent.name}</h4>
+            <p>
+              {tooltipContent.sign} {tooltipContent.degree}°
+              {tooltipContent.retrograde && <span className="retrograde"> ℞</span>}
+            </p>
+            <p>House: {tooltipContent.house}</p>
+          </div>
+        )}
       </div>
-      
+
       <ChartLegend 
         planets={planets} 
-        houses={houses}
         selectedPlanet={selectedPlanet}
         onPlanetSelect={handlePlanetClick}
-        aspects={aspects}
+        planetColors={PLANET_COLORS}
       />
-      
+
       <style jsx>{`
         .natal-chart-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          width: 100%;
-          margin: 0 auto;
-          padding: 1rem;
+          padding: 1.5rem;
+          background-color: var(--color-bg);
+          border-radius: var(--border-radius-lg);
+          box-shadow: var(--shadow-md);
         }
         
         .chart-heading {
-          text-align: center;
           margin-bottom: 1.5rem;
-          width: 100%;
+          text-align: center;
+        }
+        
+        .chart-heading h2 {
+          color: var(--color-primary);
+          margin-bottom: 0.5rem;
         }
         
         .chart-details {
-          margin-top: 0.5rem;
+          margin-bottom: 1rem;
         }
         
         .chart-details h3 {
           margin-bottom: 0.25rem;
-          color: var(--color-heading);
+          color: var(--color-text);
         }
         
         .chart-details p {
           margin: 0.25rem 0;
           color: var(--color-text-light);
-          font-size: 0.95rem;
+        }
+        
+        .chart-controls {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1rem;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+        
+        .control-btn {
+          background-color: var(--color-bg-light);
+          border: 1px solid var(--color-border);
+          color: var(--color-text);
+          padding: 0.5rem 1rem;
+          border-radius: var(--border-radius-md);
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: all 0.2s ease;
+        }
+        
+        .control-btn:hover {
+          background-color: var(--color-primary);
+          color: white;
+          border-color: var(--color-primary);
+        }
+        
+        .control-btn[aria-pressed="true"] {
+          background-color: var(--color-primary);
+          color: white;
+          border-color: var(--color-primary);
+        }
+        
+        .zoom-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        
+        .zoom-btn {
+          width: 30px;
+          height: 30px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: var(--color-bg-light);
+          border: 1px solid var(--color-border);
+          border-radius: var(--border-radius-sm);
+          cursor: pointer;
+          font-size: 1.2rem;
+          line-height: 1;
+          transition: all 0.2s ease;
+        }
+        
+        .zoom-btn:hover {
+          background-color: var(--color-primary);
+          color: white;
+          border-color: var(--color-primary);
+        }
+        
+        .zoom-level {
+          font-size: 0.9rem;
+          color: var(--color-text-light);
+          min-width: 50px;
+          text-align: center;
         }
         
         .chart-wrapper {
           position: relative;
-          max-width: 100%;
-          margin: 0 auto;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+          margin: 0 auto 2rem;
           border-radius: 50%;
-          background-color: var(--color-background-chart);
-          transition: transform 0.3s ease;
-        }
-        
-        .chart-wrapper:hover {
-          transform: scale(1.01);
+          overflow: hidden;
+          box-shadow: var(--shadow-lg);
+          touch-action: none;
         }
         
         .natal-chart-svg {
-          border-radius: 50%;
-          overflow: visible;
+          display: block;
+          user-select: none;
         }
         
-        .chart-error {
-          text-align: center;
-          padding: 2rem;
-          background-color: rgba(239, 68, 68, 0.1);
+        .planet-tooltip {
+          position: absolute;
+          background-color: var(--color-bg);
+          border: 1px solid var(--color-border);
           border-radius: var(--border-radius-md);
-          margin: 2rem 0;
-          color: var(--color-error);
+          padding: 0.75rem;
+          box-shadow: var(--shadow-md);
+          z-index: 10;
+          pointer-events: none;
+          min-width: 150px;
         }
         
-        .chart-placeholder {
-          text-align: center;
-          padding: 2rem;
-          background-color: var(--color-background-alt);
-          border-radius: var(--border-radius-md);
-          margin: 2rem 0;
-          color: var(--color-text-light);
-          border: 1px dashed var(--color-border);
+        .planet-tooltip h4 {
+          margin: 0 0 0.5rem;
+          color: var(--color-primary);
+          font-size: 1rem;
+        }
+        
+        .planet-tooltip p {
+          margin: 0.25rem 0;
+          font-size: 0.9rem;
+        }
+        
+        .retrograde {
+          color: var(--color-danger);
+          font-weight: bold;
         }
         
         @media (max-width: 768px) {
           .natal-chart-container {
             padding: 0.5rem;
           }
-          
+
           .chart-heading h2 {
             font-size: 1.5rem;
           }
-          
+
           .chart-details h3 {
             font-size: 1.2rem;
+          }
+          
+          .chart-controls {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          
+          .zoom-controls {
+            margin-top: 0.5rem;
+            justify-content: center;
           }
         }
       `}</style>

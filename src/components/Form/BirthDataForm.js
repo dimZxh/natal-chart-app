@@ -2,471 +2,564 @@ import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { useChartContext } from '../../context/ChartContext';
-import { geocodeAddress } from '../../api/astronomyApi';
+import EnhancedDatePicker from './EnhancedDatePicker';
+import Button from '../UI/Button';
 
 const BirthDataForm = () => {
-  const { setBirthData, birthData, saveProfile, savedProfiles } = useChartContext();
+  const { birthData, setBirthData, fetchChartData, resetChartData, saveProfile, profiles } = useChartContext();
   
-  // Form state
-  const [name, setName] = useState('');
-  const [birthDate, setBirthDate] = useState(new Date());
-  const [birthTime, setBirthTime] = useState('12:00');
-  const [birthPlace, setBirthPlace] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
+  // Local form state
+  const [formData, setFormData] = useState({
+    name: '',
+    date: new Date(),
+    time: '12:00',
+    place: '',
+    latitude: '',
+    longitude: ''
+  });
+  
   const [errors, setErrors] = useState({});
-  const [isGeocoding, setIsGeocoding] = useState(false);
-  const [advancedOptions, setAdvancedOptions] = useState(false);
-  const [formTouched, setFormTouched] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [formSubmitted, setFormSubmitted] = useState(false);
+  const [showLatLong, setShowLatLong] = useState(false);
+  const [placeSuggestions, setPlaceSuggestions] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formChanged, setFormChanged] = useState(false);
   
-  // Load the most recent profile if available
+  // Initialize form with existing data if available
   useEffect(() => {
-    if (savedProfiles && savedProfiles.length > 0 && !formTouched) {
-      const latestProfile = savedProfiles[0];
-      setName(latestProfile.name || '');
-      setBirthDate(new Date(latestProfile.date) || new Date());
-      setBirthTime(latestProfile.time || '12:00');
-      setBirthPlace(latestProfile.place || '');
-      setLatitude(latestProfile.latitude?.toString() || '');
-      setLongitude(latestProfile.longitude?.toString() || '');
-    }
-  }, [savedProfiles, formTouched]);
-  
-  // Form validation function
-  const validateForm = () => {
-    const newErrors = {};
-    if (!name.trim()) newErrors.name = 'Name is required';
-    if (!birthDate) newErrors.birthDate = 'Birth date is required';
-    
-    // Validate time format
-    if (!birthTime) {
-      newErrors.birthTime = 'Birth time is required';
-    } else if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(birthTime)) {
-      newErrors.birthTime = 'Invalid time format (use HH:MM)';
-    }
-    
-    if (!birthPlace.trim() && (!latitude || !longitude)) {
-      newErrors.birthPlace = 'Birth place or coordinates are required';
-    }
-    
-    // Validate latitude and longitude if provided
-    if (latitude && (isNaN(parseFloat(latitude)) || parseFloat(latitude) < -90 || parseFloat(latitude) > 90)) {
-      newErrors.latitude = 'Latitude must be between -90 and 90';
-    }
-    
-    if (longitude && (isNaN(parseFloat(longitude)) || parseFloat(longitude) < -180 || parseFloat(longitude) > 180)) {
-      newErrors.longitude = 'Longitude must be between -180 and 180';
-    }
-    
-    return newErrors;
-  };
-  
-  // Handle input changes - mark form as touched
-  const handleInputChange = (setter) => (e) => {
-    setter(e.target.value);
-    setFormTouched(true);
-    
-    // Clear related error when value changes
-    if (errors[e.target.id]) {
-      setErrors(prev => {
-        const newErrors = {...prev};
-        delete newErrors[e.target.id];
-        return newErrors;
+    if (birthData) {
+      setFormData({
+        name: birthData.name || '',
+        date: birthData.date ? new Date(birthData.date) : new Date(),
+        time: birthData.time || '12:00',
+        place: birthData.place || '',
+        latitude: birthData.latitude || '',
+        longitude: birthData.longitude || ''
       });
+      
+      setShowLatLong(birthData.latitude && birthData.longitude);
+    }
+  }, [birthData]);
+  
+  // Track form changes to enable/disable the generate button
+  useEffect(() => {
+    if (birthData) {
+      const hasChanged = 
+        formData.name !== birthData.name ||
+        formData.place !== birthData.place ||
+        formData.time !== birthData.time ||
+        (formData.date && birthData.date && formData.date.toDateString() !== new Date(birthData.date).toDateString()) ||
+        (showLatLong && (formData.latitude !== birthData.latitude || formData.longitude !== birthData.longitude));
+        
+      setFormChanged(hasChanged);
+    } else {
+      setFormChanged(true);
+    }
+  }, [formData, birthData, showLatLong]);
+
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    // Clear error for this field if it exists
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
     }
   };
   
   // Handle date change
   const handleDateChange = (date) => {
-    setBirthDate(date);
-    setFormTouched(true);
+    setFormData(prev => ({
+      ...prev,
+      date
+    }));
     
-    if (errors.birthDate) {
-      setErrors(prev => {
-        const newErrors = {...prev};
-        delete newErrors.birthDate;
-        return newErrors;
-      });
+    if (errors.date) {
+      setErrors(prev => ({
+        ...prev,
+        date: ''
+      }));
     }
+  };
+  
+  // Handle place selection
+  const handlePlaceSelect = (suggestion) => {
+    setFormData(prev => ({
+      ...prev,
+      place: suggestion.description,
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude
+    }));
+    
+    setPlaceSuggestions([]);
+    
+    if (errors.place) {
+      setErrors(prev => ({
+        ...prev,
+        place: ''
+      }));
+    }
+  };
+  
+  // Validate form fields
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required';
+    }
+    
+    if (!formData.date) {
+      newErrors.date = 'Birth date is required';
+    }
+    
+    if (!formData.time) {
+      newErrors.time = 'Birth time is required';
+    } else if (!/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(formData.time)) {
+      newErrors.time = 'Invalid time format (use HH:MM)';
+    }
+    
+    if (!formData.place.trim()) {
+      newErrors.place = 'Birth place is required';
+    }
+    
+    if (showLatLong) {
+      if (!formData.latitude || isNaN(parseFloat(formData.latitude))) {
+        newErrors.latitude = 'Valid latitude is required';
+      } else if (parseFloat(formData.latitude) < -90 || parseFloat(formData.latitude) > 90) {
+        newErrors.latitude = 'Latitude must be between -90 and 90';
+      }
+      
+      if (!formData.longitude || isNaN(parseFloat(formData.longitude))) {
+        newErrors.longitude = 'Valid longitude is required';
+      } else if (parseFloat(formData.longitude) < -180 || parseFloat(formData.longitude) > 180) {
+        newErrors.longitude = 'Longitude must be between -180 and 180';
+      }
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
   
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setFormSubmitted(true);
     
-    // Validate form
-    const newErrors = validateForm();
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (!validateForm()) {
       return;
     }
     
+    setIsSubmitting(true);
+    
     try {
-      setShowSuccess(false);
-      let lat = parseFloat(latitude);
-      let lng = parseFloat(longitude);
-      
-      // If coordinates are not provided, geocode the birth place
-      if (isNaN(lat) || isNaN(lng)) {
-        setIsGeocoding(true);
-        try {
-          const geocodeResult = await geocodeAddress(birthPlace);
-          lat = geocodeResult.latitude;
-          lng = geocodeResult.longitude;
-          setLatitude(lat.toString());
-          setLongitude(lng.toString());
-        } catch (geocodeError) {
-          setErrors({ 
-            birthPlace: `Could not find coordinates for this location: ${geocodeError.message}` 
-          });
-          setIsGeocoding(false);
-          return;
-        }
-        setIsGeocoding(false);
-      }
-      
-      // Format time as HH:MM
-      const formattedTime = birthTime.includes(':') 
-        ? birthTime 
-        : `${birthTime}:00`;
-      
-      // Create birth data object
-      const birthDataObj = {
-        name,
-        date: birthDate,
-        time: formattedTime,
-        place: birthPlace,
-        latitude: lat,
-        longitude: lng
-      };
-      
       // Set birth data in context
-      setBirthData(birthDataObj);
-      
-      // Show success message briefly
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-      
-      // Clear form errors
-      setErrors({});
-    } catch (error) {
-      setErrors({ submit: error.message });
-      setIsGeocoding(false);
-    }
-  };
-  
-  // Handle saving profile
-  const handleSaveProfile = () => {
-    if (birthData) {
-      saveProfile({
-        ...birthData,
-        savedAt: new Date().toISOString()
+      await setBirthData({
+        name: formData.name.trim(),
+        date: formData.date,
+        time: formData.time,
+        place: formData.place.trim(),
+        latitude: showLatLong ? formData.latitude : null,
+        longitude: showLatLong ? formData.longitude : null
       });
       
-      // Show success message briefly
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      // Fetch chart data
+      await fetchChartData();
+      
+      // Reset form changed state
+      setFormChanged(false);
+      
+    } catch (error) {
+      console.error('Error generating chart:', error);
+      setErrors(prev => ({
+        ...prev,
+        submit: 'Error generating chart. Please check your input and try again.'
+      }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
-  // Clear form
-  const handleClearForm = () => {
-    setName('');
-    setBirthDate(new Date());
-    setBirthTime('12:00');
-    setBirthPlace('');
-    setLatitude('');
-    setLongitude('');
-    setErrors({});
-    setFormTouched(true);
-    setFormSubmitted(false);
+  // Save profile
+  const handleSaveProfile = () => {
+    if (birthData) {
+      saveProfile(birthData);
+    }
   };
   
+  // Reset form
+  const handleReset = () => {
+    setFormData({
+      name: '',
+      date: new Date(),
+      time: '12:00',
+      place: '',
+      latitude: '',
+      longitude: ''
+    });
+    
+    setErrors({});
+    setShowLatLong(false);
+    resetChartData();
+  };
+  
+  // Check if profile already exists
+  const profileExists = () => {
+    if (!birthData || !profiles.length) return false;
+    
+    return profiles.some(profile => 
+      profile.name === birthData.name && 
+      new Date(profile.date).toDateString() === new Date(birthData.date).toDateString() &&
+      profile.time === birthData.time &&
+      profile.place === birthData.place
+    );
+  };
+
   return (
     <div className="birth-data-form">
-      <h2 className="form-title">Birth Information</h2>
+      <h2 className="form-title">Enter Birth Details</h2>
       
       {errors.submit && (
-        <div className="error-message">
-          <p>{errors.submit}</p>
-          <button className="close-btn" onClick={() => setErrors(prev => {
-            const newErrors = {...prev};
-            delete newErrors.submit;
-            return newErrors;
-          })}>×</button>
+        <div className="form-error" role="alert">
+          {errors.submit}
         </div>
       )}
       
-      {showSuccess && (
-        <div className="success-message slide-up">
-          <p>{birthData ? 'Chart generated successfully!' : 'Profile saved successfully!'}</p>
-          <button className="close-btn" onClick={() => setShowSuccess(false)}>×</button>
-        </div>
-      )}
-      
-      <form onSubmit={handleSubmit} className={formSubmitted ? 'was-validated' : ''}>
+      <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label className="form-label" htmlFor="name">Full Name:</label>
+          <label htmlFor="name">Full Name <span className="required">*</span></label>
           <input
             type="text"
             id="name"
-            className={`form-control ${errors.name ? 'is-invalid' : ''}`}
-            value={name}
-            onChange={handleInputChange(setName)}
-            placeholder="Enter your name"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            className={`form-control ${errors.name ? 'error' : ''}`}
+            placeholder="Enter your full name"
+            aria-describedby={errors.name ? "name-error" : undefined}
+            autoComplete="name"
             required
           />
-          {errors.name && <div className="invalid-feedback">{errors.name}</div>}
-        </div>
-        
-        <div className="form-group date-time-group">
-          <div className="date-field">
-            <label className="form-label" htmlFor="birthDate">Birth Date:</label>
-            <div className="date-picker-container">
-              <DatePicker
-                id="birthDate"
-                selected={birthDate}
-                onChange={handleDateChange}
-                className={`form-control date-picker ${errors.birthDate ? 'is-invalid' : ''}`}
-                dateFormat="MMMM d, yyyy"
-                showMonthDropdown
-                showYearDropdown
-                dropdownMode="select"
-                yearDropdownItemNumber={100}
-                scrollableYearDropdown
-                placeholderText="Select birth date"
-                required
-                fixedHeight
-                showPopperArrow
-                popperClassName="date-picker-popper"
-                popperPlacement="bottom-start"
-                popperModifiers={{
-                  preventOverflow: {
-                    enabled: true,
-                    escapeWithReference: false,
-                    boundariesElement: 'viewport'
-                  }
-                }}
-              />
-              <span className="date-icon">📅</span>
+          {errors.name && (
+            <div id="name-error" className="error-message" role="alert">
+              {errors.name}
             </div>
-            {errors.birthDate && <div className="invalid-feedback">{errors.birthDate}</div>}
-          </div>
-          
-          <div className="time-field">
-            <label className="form-label" htmlFor="birthTime">Birth Time:</label>
-            <div className="time-input-container">
-              <input
-                type="time"
-                id="birthTime"
-                className={`form-control ${errors.birthTime ? 'is-invalid' : ''}`}
-                value={birthTime}
-                onChange={handleInputChange(setBirthTime)}
-                required
-              />
-              <span className="time-icon">🕒</span>
-            </div>
-            {errors.birthTime && <div className="invalid-feedback">{errors.birthTime}</div>}
-          </div>
+          )}
         </div>
         
         <div className="form-group">
-          <label className="form-label" htmlFor="birthPlace">Birth Place:</label>
-          <div className="location-input-container">
-            <input
-              type="text"
-              id="birthPlace"
-              className={`form-control ${errors.birthPlace ? 'is-invalid' : ''}`}
-              value={birthPlace}
-              onChange={handleInputChange(setBirthPlace)}
-              placeholder="City, Country"
-              required={!latitude || !longitude}
-            />
-            <span className="location-icon">📍</span>
-          </div>
-          {errors.birthPlace && <div className="invalid-feedback">{errors.birthPlace}</div>}
+          <EnhancedDatePicker
+            id="birth-date"
+            label="Birth Date"
+            selectedDate={formData.date}
+            onChange={handleDateChange}
+            required={true}
+            error={errors.date}
+            placeholder="Select birth date..."
+          />
         </div>
         
-        <div className="advanced-toggle">
-          <button 
-            type="button" 
-            className="link-button"
-            onClick={() => setAdvancedOptions(!advancedOptions)}
+        <div className="form-group">
+          <label htmlFor="time">Birth Time <span className="required">*</span></label>
+          <input
+            type="time"
+            id="time"
+            name="time"
+            value={formData.time}
+            onChange={handleChange}
+            className={`form-control ${errors.time ? 'error' : ''}`}
+            aria-describedby={errors.time ? "time-error" : undefined}
+            required
+          />
+          {errors.time && (
+            <div id="time-error" className="error-message" role="alert">
+              {errors.time}
+            </div>
+          )}
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="place">Birth Place <span className="required">*</span></label>
+          <div className="place-input-container">
+            <input
+              type="text"
+              id="place"
+              name="place"
+              value={formData.place}
+              onChange={handleChange}
+              className={`form-control ${errors.place ? 'error' : ''}`}
+              placeholder="City, Country"
+              aria-describedby={errors.place ? "place-error" : undefined}
+              autoComplete="off"
+              required
+            />
+            {placeSuggestions.length > 0 && (
+              <ul className="place-suggestions">
+                {placeSuggestions.map((suggestion, index) => (
+                  <li 
+                    key={index}
+                    onClick={() => handlePlaceSelect(suggestion)}
+                    tabIndex={0}
+                    role="option"
+                    aria-selected={false}
+                  >
+                    {suggestion.description}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {errors.place && (
+            <div id="place-error" className="error-message" role="alert">
+              {errors.place}
+            </div>
+          )}
+        </div>
+        
+        <div className="form-group toggle-container">
+          <button
+            type="button"
+            className="toggle-btn"
+            onClick={() => setShowLatLong(!showLatLong)}
+            aria-expanded={showLatLong}
           >
-            {advancedOptions ? '▼ Hide Advanced Options' : '▶ Show Advanced Options'}
+            {showLatLong ? '− Hide Coordinates' : '+ Add Coordinates Manually'}
           </button>
         </div>
         
-        {advancedOptions && (
-          <div className="advanced-options slide-up">
-            <p className="coordinates-help">Manually enter coordinates if known. These will override any geocoded values.</p>
-            <div className="form-group coordinates-group">
-              <div className="lat-field">
-                <label className="form-label" htmlFor="latitude">Latitude:</label>
-                <input
-                  type="text"
-                  id="latitude"
-                  className={`form-control ${errors.latitude ? 'is-invalid' : ''}`}
-                  value={latitude}
-                  onChange={handleInputChange(setLatitude)}
-                  placeholder="e.g. 40.7128"
-                />
-                {errors.latitude && <div className="invalid-feedback">{errors.latitude}</div>}
-              </div>
-              
-              <div className="lng-field">
-                <label className="form-label" htmlFor="longitude">Longitude:</label>
-                <input
-                  type="text"
-                  id="longitude"
-                  className={`form-control ${errors.longitude ? 'is-invalid' : ''}`}
-                  value={longitude}
-                  onChange={handleInputChange(setLongitude)}
-                  placeholder="e.g. -74.0060"
-                />
-                {errors.longitude && <div className="invalid-feedback">{errors.longitude}</div>}
-              </div>
+        {showLatLong && (
+          <div className="coordinates-container">
+            <div className="form-group">
+              <label htmlFor="latitude">Latitude <span className="required">*</span></label>
+              <input
+                type="text"
+                id="latitude"
+                name="latitude"
+                value={formData.latitude}
+                onChange={handleChange}
+                className={`form-control ${errors.latitude ? 'error' : ''}`}
+                placeholder="e.g. 40.7128"
+                aria-describedby={errors.latitude ? "latitude-error" : undefined}
+                required={showLatLong}
+              />
+              {errors.latitude && (
+                <div id="latitude-error" className="error-message" role="alert">
+                  {errors.latitude}
+                </div>
+              )}
+            </div>
+            
+            <div className="form-group">
+              <label htmlFor="longitude">Longitude <span className="required">*</span></label>
+              <input
+                type="text"
+                id="longitude"
+                name="longitude"
+                value={formData.longitude}
+                onChange={handleChange}
+                className={`form-control ${errors.longitude ? 'error' : ''}`}
+                placeholder="e.g. -74.0060"
+                aria-describedby={errors.longitude ? "longitude-error" : undefined}
+                required={showLatLong}
+              />
+              {errors.longitude && (
+                <div id="longitude-error" className="error-message" role="alert">
+                  {errors.longitude}
+                </div>
+              )}
             </div>
           </div>
         )}
         
         <div className="form-actions">
-          <div className="action-buttons">
-            <button 
-              type="submit" 
-              className="btn btn-primary generate-btn"
-              disabled={isGeocoding}
-            >
-              {isGeocoding ? (
-                <><span className="spinner-small"></span> Finding Location...</>
-              ) : (
-                'Generate Chart'
-              )}
-            </button>
-            
-            {birthData && (
-              <button
-                type="button"
-                className="btn btn-secondary save-btn"
-                onClick={handleSaveProfile}
-              >
-                Save Profile
-              </button>
-            )}
-          </div>
-          
-          <button
-            type="button"
-            className="btn btn-text clear-btn"
-            onClick={handleClearForm}
+          <Button 
+            type="submit"
+            variant="primary"
+            fullWidth={true}
+            disabled={isSubmitting || !formChanged}
           >
-            Clear Form
-          </button>
+            {isSubmitting ? 'Generating Chart...' : birthData ? 'Update Chart' : 'Generate Chart'}
+          </Button>
+          
+          {birthData && (
+            <div className="secondary-actions">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSaveProfile}
+                disabled={profileExists()}
+              >
+                {profileExists() ? 'Profile Saved' : 'Save Profile'}
+              </Button>
+              
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleReset}
+              >
+                New Chart
+              </Button>
+            </div>
+          )}
         </div>
       </form>
       
       <style jsx>{`
-        .date-picker-container,
-        .time-input-container,
-        .location-input-container {
-          position: relative;
+        .birth-data-form {
+          padding: 1.5rem;
         }
         
-        .date-icon,
-        .time-icon,
-        .location-icon {
-          position: absolute;
-          right: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--color-text-light);
-          pointer-events: none;
+        .form-title {
+          margin-top: 0;
+          margin-bottom: 1.5rem;
+          font-size: 1.5rem;
+          color: var(--color-text);
+          text-align: center;
         }
         
-        .error-message,
-        .success-message {
-          padding: 12px 16px;
-          border-radius: var(--border-radius-sm);
-          margin-bottom: 20px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+        .form-group {
+          margin-bottom: 1.25rem;
+        }
+        
+        .form-group label {
+          display: block;
+          margin-bottom: 0.5rem;
+          font-weight: 500;
+          color: var(--color-text);
+          font-size: 0.95rem;
+        }
+        
+        .required {
+          color: var(--color-danger);
+          margin-left: 2px;
+        }
+        
+        .form-control {
+          display: block;
+          width: 100%;
+          padding: 0.75rem 1rem;
+          font-size: 1rem;
+          line-height: 1.5;
+          color: var(--color-text);
+          background-color: var(--color-bg-light);
+          background-clip: padding-box;
+          border: 1px solid var(--color-border);
+          border-radius: 8px;
+          transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        
+        .form-control:focus {
+          border-color: var(--color-primary);
+          outline: 0;
+          box-shadow: 0 0 0 3px var(--color-primary-transparent);
+        }
+        
+        .form-control.error {
+          border-color: var(--color-danger);
+        }
+        
+        .form-control.error:focus {
+          box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.25);
         }
         
         .error-message {
-          background-color: rgba(239, 68, 68, 0.1);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          color: var(--color-error);
+          color: var(--color-danger);
+          font-size: 0.85rem;
+          margin-top: 0.5rem;
+          margin-bottom: 0;
         }
         
-        .success-message {
-          background-color: rgba(16, 185, 129, 0.1);
-          border: 1px solid rgba(16, 185, 129, 0.2);
-          color: var(--color-success);
+        .form-error {
+          margin-bottom: 1.5rem;
+          padding: 0.75rem 1rem;
+          background-color: rgba(220, 53, 69, 0.1);
+          border-left: 4px solid var(--color-danger);
+          color: var(--color-danger);
+          border-radius: 4px;
         }
         
-        .close-btn {
-          background: none;
-          border: none;
-          font-size: 1.5rem;
-          line-height: 1;
-          color: currentColor;
+        .place-input-container {
+          position: relative;
+        }
+        
+        .place-suggestions {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          z-index: 10;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          background-color: var(--color-bg);
+          border: 1px solid var(--color-border);
+          border-radius: 0 0 8px 8px;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          max-height: 200px;
+          overflow-y: auto;
+        }
+        
+        .place-suggestions li {
+          padding: 0.75rem 1rem;
           cursor: pointer;
+          transition: background-color 0.15s ease;
         }
         
-        .spinner-small {
-          display: inline-block;
-          width: 1rem;
-          height: 1rem;
-          border: 2px solid rgba(255, 255, 255, 0.3);
-          border-radius: 50%;
-          border-top-color: white;
-          animation: spin 1s linear infinite;
-          margin-right: 8px;
-          vertical-align: middle;
+        .place-suggestions li:hover,
+        .place-suggestions li:focus {
+          background-color: var(--color-bg-light);
+          outline: none;
         }
         
-        .coordinates-help {
-          margin-top: 0;
-          margin-bottom: 16px;
-          font-size: 0.9rem;
-          color: var(--color-text-light);
-          font-style: italic;
+        .toggle-container {
+          text-align: right;
         }
         
-        .btn-text {
+        .toggle-btn {
           background: none;
           border: none;
-          color: var(--color-text-light);
-          text-decoration: underline;
-          padding: 8px 12px;
-        }
-        
-        .btn-text:hover {
           color: var(--color-primary);
+          font-size: 0.9rem;
+          cursor: pointer;
+          padding: 0.5rem;
+          font-weight: 500;
         }
         
-        .action-buttons {
+        .toggle-btn:hover {
+          text-decoration: underline;
+        }
+        
+        .coordinates-container {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+        
+        .form-actions {
+          margin-top: 2rem;
+        }
+        
+        .secondary-actions {
           display: flex;
-          gap: 12px;
+          gap: 1rem;
+          margin-top: 1rem;
         }
         
         @media (max-width: 768px) {
-          .action-buttons {
-            flex-direction: column;
-            width: 100%;
+          .coordinates-container {
+            grid-template-columns: 1fr;
+            gap: 0;
           }
           
-          .form-actions {
+          .secondary-actions {
             flex-direction: column;
-            gap: 16px;
-          }
-          
-          .btn-text {
-            text-align: center;
+            gap: 0.75rem;
           }
         }
       `}</style>
